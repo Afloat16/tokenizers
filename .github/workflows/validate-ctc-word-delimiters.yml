@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ad149b626405e6a504847cfa624bd74cc4d574ed
-          fetch-depth: 2
+          ref: 01e9c587e2acf292d5b5895d70ae8fa6a64deae2
+          fetch-depth: 3
           persist-credentials: false
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
@@ -54,7 +54,7 @@ jobs:
           PY
       - name: Restore and lint the exact patch
         run: |
-          git checkout ad149b626405e6a504847cfa624bd74cc4d574ed -- tk-encode/src/decoders/ctc.rs
+          git checkout 01e9c587e2acf292d5b5895d70ae8fa6a64deae2 -- tk-encode/src/decoders/ctc.rs
           rustfmt --edition 2024 --check tk-encode/src/decoders/ctc.rs tk-serialize/tests/ctc_cleanup.rs
           cargo clippy -p tk-serialize --features wordlevel --test ctc_cleanup -- -D warnings
       - name: Save test logs
