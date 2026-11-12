@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 93bc7dcb38d31d812549fa86ad1f88232cadf2f2
-          fetch-depth: 2
+          ref: fdbaf41985934b2c66d8cdaf67063d0dabf5672a
+          fetch-depth: 3
           persist-credentials: false
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
@@ -59,7 +59,7 @@ jobs:
           PY
       - name: Restore and lint the exact patch
         run: |
-          git checkout 93bc7dcb38d31d812549fa86ad1f88232cadf2f2 -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
+          git checkout fdbaf41985934b2c66d8cdaf67063d0dabf5672a -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
           rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs tk-serialize/tests/sparse_added_token_ids.rs
           cargo clippy -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- -D warnings
       - name: Save test logs
