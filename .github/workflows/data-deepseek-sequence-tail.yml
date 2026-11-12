@@ -21,8 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 17e1e78fac6f0cda38a81f77d77f9522c59b3722
-          fetch-depth: 3
+          ref: 9411811c8cc2eb27f1602d7662593af0948c8359
+          fetch-depth: 4
           persist-credentials: false
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
@@ -62,7 +62,7 @@ jobs:
           PY
       - name: Restore exact patch and check formatting
         run: |
-          git checkout 17e1e78fac6f0cda38a81f77d77f9522c59b3722 -- tk-encode/src/pre_tokenizers/sequence.rs
+          git checkout 9411811c8cc2eb27f1602d7662593af0948c8359 -- tk-encode/src/pre_tokenizers/sequence.rs
           rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/pre_tokenizers/sequence.rs tk-serialize/tests/deepseek_sequence_tail.rs
       - name: Compare strict Clippy diagnostics with original source
         run: |
@@ -89,7 +89,7 @@ jobs:
           assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
           assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
           PY
-          git checkout 17e1e78fac6f0cda38a81f77d77f9522c59b3722 -- tk-encode/src/pre_tokenizers/sequence.rs
+          git checkout 9411811c8cc2eb27f1602d7662593af0948c8359 -- tk-encode/src/pre_tokenizers/sequence.rs
       - name: Save test logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
