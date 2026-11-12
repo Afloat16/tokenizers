@@ -1,0 +1,74 @@
+name: Validate sparse model added-token IDs
+on:
+  push:
+    branches: [validation/sparse-model-added-token-ids-20261112]
+permissions:
+  contents: read
+jobs:
+  native-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: tokenizers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 93bc7dcb38d31d812549fa86ad1f88232cadf2f2
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Cache Rust compilation
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: tokenizers
+          shared-key: data-contributions-native
+          cache-bin: false
+      - name: Test native sparse ID regressions
+        run: |
+          set -o pipefail
+          cargo test -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- --nocapture 2>&1 | tee patched.log
+      - name: Test existing reader and added vocabulary cases
+        run: |
+          set -o pipefail
+          cargo test -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --lib from_json::tests -- --nocapture 2>&1 | tee existing-reader.log
+          cargo test -p tk-encode --features wordlevel,wordpiece,unigram --lib vocab::bucket_added_vocabulary -- --nocapture 2>&1 | tee existing-vocab.log
+      - name: Restore unchanged upstream allocator
+        run: git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
+      - name: Verify original behavior fails new regressions
+        shell: bash
+        run: |
+          set +e
+          cargo test -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- --nocapture > baseline.log 2>&1
+          result=$?
+          set -e
+          cat baseline.log
+          test "$result" -eq 101
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("baseline.log").read_text()
+          assert re.search(r"test result: FAILED\. \d+ passed; [1-9]\d* failed;", text), text
+          PY
+      - name: Restore and lint the exact patch
+        run: |
+          git checkout 93bc7dcb38d31d812549fa86ad1f88232cadf2f2 -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
+          rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs tk-serialize/tests/sparse_added_token_ids.rs
+          cargo clippy -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- -D warnings
+      - name: Save test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: sparse-added-ids-native-validation
+          path: |
+            tokenizers/patched.log
+            tokenizers/existing-reader.log
+            tokenizers/existing-vocab.log
+            tokenizers/baseline.log
