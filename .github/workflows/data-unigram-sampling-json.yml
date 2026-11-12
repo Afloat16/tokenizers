@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: c9dcca8cfc2404e7c5e4ff717436a02bbe99970e
-          fetch-depth: 2
+          ref: 8f2deb6d8295e1c0faa2410f210ffc9eae0c1087
+          fetch-depth: 3
           persist-credentials: false
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
@@ -54,7 +54,7 @@ jobs:
           PY
       - name: Restore and lint the exact patch
         run: |
-          git checkout c9dcca8cfc2404e7c5e4ff717436a02bbe99970e -- tk-serialize/src/from_json/model.rs tk-serialize/src/to_json/model.rs tk-serialize/src/to_json/writer.rs
+          git checkout 8f2deb6d8295e1c0faa2410f210ffc9eae0c1087 -- tk-serialize/src/from_json/model.rs tk-serialize/src/to_json/model.rs tk-serialize/src/to_json/writer.rs
           rustfmt --edition 2024 --config skip_children=true --check tk-serialize/src/from_json/model.rs tk-serialize/src/to_json/model.rs tk-serialize/src/to_json/writer.rs tk-serialize/tests/unigram_sampling_json.rs
           set +e
           cargo clippy -p tk-serialize --features unigram,serialize --test unigram_sampling_json -- -D warnings > clippy-patched.log 2>&1
@@ -80,7 +80,7 @@ jobs:
           assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
           assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
           PY
-          git checkout c9dcca8cfc2404e7c5e4ff717436a02bbe99970e -- tk-serialize/src/from_json/model.rs tk-serialize/src/to_json/model.rs tk-serialize/src/to_json/writer.rs
+          git checkout 8f2deb6d8295e1c0faa2410f210ffc9eae0c1087 -- tk-serialize/src/from_json/model.rs tk-serialize/src/to_json/model.rs tk-serialize/src/to_json/writer.rs
       - name: Save test logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
