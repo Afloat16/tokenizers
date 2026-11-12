@@ -61,7 +61,31 @@ jobs:
         run: |
           git checkout fdbaf41985934b2c66d8cdaf67063d0dabf5672a -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
           rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs tk-serialize/tests/sparse_added_token_ids.rs
-          cargo clippy -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- -D warnings
+          set +e
+          cargo clippy -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- -D warnings > clippy-patched.log 2>&1
+          patched_status=$?
+          git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
+          cargo clippy -p tk-serialize --features wordlevel,wordpiece,unigram,serialize --test sparse_added_token_ids -- -D warnings > clippy-baseline.log 2>&1
+          baseline_status=$?
+          set -e
+          cat clippy-patched.log
+          cat clippy-baseline.log
+          test "$patched_status" -eq "$baseline_status"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def errors(name):
+              text = re.sub(r"\x1b\[[0-9;]*m", "", Path(name).read_text())
+              return [line for line in text.splitlines() if line.startswith("error:")]
+          expected = [
+              "error: the loop variable `lane` is used to index `slot.payload`",
+              "error: the loop variable `pos` is only used to index `self.begin_nodes`",
+              "error: could not compile `tk-encode` (lib) due to 2 previous errors",
+          ]
+          assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
+          assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
+          PY
+          git checkout fdbaf41985934b2c66d8cdaf67063d0dabf5672a -- tk-encode/src/vocab/bucket_added_vocabulary.rs tk-serialize/src/from_json/mod.rs
       - name: Save test logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -72,3 +96,5 @@ jobs:
             tokenizers/existing-reader.log
             tokenizers/existing-vocab.log
             tokenizers/baseline.log
+            tokenizers/clippy-patched.log
+            tokenizers/clippy-baseline.log
