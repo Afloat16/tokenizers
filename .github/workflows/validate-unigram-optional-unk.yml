@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 49878d5866df4c75f0493491a4668518318baec7
-          fetch-depth: 2
+          ref: 58eb5c01f18ac667f45dae8c38cc5e6254965c08
+          fetch-depth: 3
           persist-credentials: false
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
@@ -32,9 +32,9 @@ jobs:
           shared-key: data-contributions-native
           cache-bin: false
       - name: Test native optional unknown-ID regressions
-        run: cargo test -p tk-serialize --features unigram --test unigram_optional_unk -- --nocapture 2>&1 | tee patched.log
+        run: set -o pipefail; cargo test -p tk-serialize --features unigram --test unigram_optional_unk -- --nocapture 2>&1 | tee patched.log
       - name: Test existing Unigram cases
-        run: cargo test -p tk-encode --features unigram --lib models::unigram -- --nocapture 2>&1 | tee existing.log
+        run: set -o pipefail; cargo test -p tk-encode --features unigram --lib models::unigram -- --nocapture 2>&1 | tee existing.log
       - name: Restore unchanged upstream model
         run: git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/models/unigram/model.rs
       - name: Verify original behavior fails optional unknown-ID regressions
@@ -54,7 +54,7 @@ jobs:
           PY
       - name: Restore and lint the exact patch
         run: |
-          git checkout 49878d5866df4c75f0493491a4668518318baec7 -- tk-encode/src/models/unigram/model.rs
+          git checkout 58eb5c01f18ac667f45dae8c38cc5e6254965c08 -- tk-encode/src/models/unigram/model.rs
           rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/models/unigram/model.rs tk-serialize/tests/unigram_optional_unk.rs
           set +e
           cargo clippy -p tk-serialize --features unigram --test unigram_optional_unk -- -D warnings > clippy-patched.log 2>&1
@@ -80,7 +80,7 @@ jobs:
           assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
           assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
           PY
-          git checkout 49878d5866df4c75f0493491a4668518318baec7 -- tk-encode/src/models/unigram/model.rs
+          git checkout 58eb5c01f18ac667f45dae8c38cc5e6254965c08 -- tk-encode/src/models/unigram/model.rs
       - name: Save test logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
