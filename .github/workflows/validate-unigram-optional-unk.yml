@@ -1,0 +1,94 @@
+name: Validate Unigram optional unknown token
+on:
+  push:
+    branches: [validation/unigram-optional-unknown-id-20261112]
+permissions:
+  contents: read
+jobs:
+  native-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: tokenizers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 49878d5866df4c75f0493491a4668518318baec7
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Cache Rust compilation
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: tokenizers
+          shared-key: data-contributions-native
+          cache-bin: false
+      - name: Test native optional unknown-ID regressions
+        run: cargo test -p tk-serialize --features unigram --test unigram_optional_unk -- --nocapture 2>&1 | tee patched.log
+      - name: Test existing Unigram cases
+        run: cargo test -p tk-encode --features unigram --lib models::unigram -- --nocapture 2>&1 | tee existing.log
+      - name: Restore unchanged upstream model
+        run: git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/models/unigram/model.rs
+      - name: Verify original behavior fails optional unknown-ID regressions
+        shell: bash
+        run: |
+          set +e
+          cargo test -p tk-serialize --features unigram --test unigram_optional_unk -- --nocapture > baseline.log 2>&1
+          result=$?
+          set -e
+          cat baseline.log
+          test "$result" -eq 101
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("baseline.log").read_text()
+          assert re.search(r"test result: FAILED\. \d+ passed; [1-9]\d* failed;", text), text
+          PY
+      - name: Restore and lint the exact patch
+        run: |
+          git checkout 49878d5866df4c75f0493491a4668518318baec7 -- tk-encode/src/models/unigram/model.rs
+          rustfmt --edition 2024 --config skip_children=true --check tk-encode/src/models/unigram/model.rs tk-serialize/tests/unigram_optional_unk.rs
+          set +e
+          cargo clippy -p tk-serialize --features unigram --test unigram_optional_unk -- -D warnings > clippy-patched.log 2>&1
+          patched_status=$?
+          git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/models/unigram/model.rs
+          cargo clippy -p tk-serialize --features unigram --test unigram_optional_unk -- -D warnings > clippy-baseline.log 2>&1
+          baseline_status=$?
+          set -e
+          cat clippy-patched.log
+          cat clippy-baseline.log
+          test "$patched_status" -eq "$baseline_status"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def errors(name):
+              text = re.sub(r"\x1b\[[0-9;]*m", "", Path(name).read_text())
+              return [line for line in text.splitlines() if line.startswith("error:")]
+          expected = [
+              "error: the loop variable `lane` is used to index `slot.payload`",
+              "error: the loop variable `pos` is only used to index `self.begin_nodes`",
+              "error: could not compile `tk-encode` (lib) due to 2 previous errors",
+          ]
+          assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
+          assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
+          PY
+          git checkout 49878d5866df4c75f0493491a4668518318baec7 -- tk-encode/src/models/unigram/model.rs
+      - name: Save test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: unigram-optional-unk-native-validation
+          path: |
+            tokenizers/patched.log
+            tokenizers/existing.log
+            tokenizers/baseline.log
+            tokenizers/clippy-patched.log
+            tokenizers/clippy-baseline.log
