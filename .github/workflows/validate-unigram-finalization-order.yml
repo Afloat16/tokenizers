@@ -1,0 +1,114 @@
+name: Validate Unigram finalization order
+on:
+  push:
+    branches: [validation/unigram-finalization-order-20261112]
+permissions:
+  contents: read
+jobs:
+  native-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: tokenizers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: d5c8be4ce3c0b15254d406b0b41dc722b22643e5
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Cache Rust compilation
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: tokenizers
+          shared-key: data-contributions-native
+          cache-bin: false
+      - name: Test native training regressions
+        run: |
+          set -o pipefail
+          cargo test -p tk-train --lib finalization_order_tests -- --nocapture 2>&1 | tee patched.log
+      - name: Test existing Unigram trainer cases
+        run: |
+          set -o pipefail
+          cargo test -p tk-train --lib trainers::unigram::tests -- --nocapture 2>&1 | tee existing.log
+      - name: Restore upstream trainer with regression test module only
+        run: |
+          git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-train/src/trainers/unigram.rs
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("tk-train/src/trainers/unigram.rs")
+          path.write_text(path.read_text() + '\n#[cfg(test)]\n#[path = "unigram_finalization_order.rs"]\nmod finalization_order_tests;\n')
+          PY
+      - name: Verify original behavior fails new regressions
+        shell: bash
+        run: |
+          set +e
+          cargo test -p tk-train --lib finalization_order_tests -- --nocapture > baseline.log 2>&1
+          result=$?
+          set -e
+          cat baseline.log
+          test "$result" -eq 101
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("baseline.log").read_text()
+          assert re.search(r"test result: FAILED\. \d+ passed; [1-9]\d* failed;", text), text
+          PY
+      - name: Restore exact patch and check formatting
+        run: |
+          git checkout d5c8be4ce3c0b15254d406b0b41dc722b22643e5 -- tk-train/src/trainers/unigram.rs
+          rustfmt --edition 2024 --config skip_children=true --check tk-train/src/trainers/unigram.rs tk-train/src/trainers/unigram_finalization_order.rs
+      - name: Compare strict Clippy diagnostics with original source
+        run: |
+          set +e
+          cargo clippy -p tk-train --lib -- -D warnings > clippy-patched.log 2>&1
+          patched_status=$?
+          set -e
+          git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-train/src/trainers/unigram.rs
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("tk-train/src/trainers/unigram.rs")
+          path.write_text(path.read_text() + '\n#[cfg(test)]\n#[path = "unigram_finalization_order.rs"]\nmod finalization_order_tests;\n')
+          PY
+          set +e
+          cargo clippy -p tk-train --lib -- -D warnings > clippy-baseline.log 2>&1
+          baseline_status=$?
+          set -e
+          cat clippy-patched.log
+          cat clippy-baseline.log
+          test "$patched_status" -eq "$baseline_status"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def errors(name):
+              text = re.sub(r"\x1b\[[0-9;]*m", "", Path(name).read_text())
+              return [line for line in text.splitlines() if line.startswith("error:")]
+          expected = [
+              "error: the loop variable `lane` is used to index `slot.payload`",
+              "error: the loop variable `pos` is only used to index `self.begin_nodes`",
+              "error: could not compile `tk-encode` (lib) due to 2 previous errors",
+          ]
+          assert errors("clippy-baseline.log") == expected, errors("clippy-baseline.log")
+          assert errors("clippy-patched.log") == expected, errors("clippy-patched.log")
+          PY
+          git checkout d5c8be4ce3c0b15254d406b0b41dc722b22643e5 -- tk-train/src/trainers/unigram.rs
+      - name: Save test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: unigram-finalization-order-validation
+          path: |
+            tokenizers/patched.log
+            tokenizers/existing.log
+            tokenizers/baseline.log
+            tokenizers/clippy-patched.log
+            tokenizers/clippy-baseline.log
+
