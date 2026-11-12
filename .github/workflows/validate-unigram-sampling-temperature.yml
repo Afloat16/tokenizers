@@ -1,0 +1,68 @@
+name: Validate Unigram sampling temperature
+on:
+  push:
+    branches: [validation/unigram-sampling-temperature-20261112]
+permissions:
+  contents: read
+jobs:
+  native-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: tokenizers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 691dabb68ff22c5df5d414d49bbf90dcdfebd5f1
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Cache Rust compilation
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: tokenizers
+          shared-key: data-contributions-native
+          cache-bin: false
+      - name: Test native sampling regressions
+        run: cargo test -p tk-encode --features unigram --test unigram_sampling_temperature -- --nocapture 2>&1 | tee patched.log
+      - name: Test existing Unigram cases
+        run: cargo test -p tk-encode --features unigram --lib models::unigram -- --nocapture 2>&1 | tee existing.log
+      - name: Restore unchanged upstream lattice
+        run: git checkout 39e28180be35af322d0abf08007d937641a5493b -- tk-encode/src/models/unigram/lattice.rs
+      - name: Verify original behavior fails sampling regressions
+        shell: bash
+        run: |
+          set +e
+          cargo test -p tk-encode --features unigram --test unigram_sampling_temperature -- --nocapture > baseline.log 2>&1
+          result=$?
+          set -e
+          cat baseline.log
+          test "$result" -eq 101
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("baseline.log").read_text()
+          assert re.search(r"test result: FAILED\. \d+ passed; [1-9]\d* failed;", text), text
+          PY
+      - name: Restore and lint the exact patch
+        run: |
+          git checkout 691dabb68ff22c5df5d414d49bbf90dcdfebd5f1 -- tk-encode/src/models/unigram/lattice.rs
+          rustfmt --edition 2024 --check tk-encode/src/models/unigram/lattice.rs tk-encode/tests/unigram_sampling_temperature.rs
+          cargo clippy -p tk-encode --features unigram --test unigram_sampling_temperature -- -D warnings
+      - name: Save test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: unigram-sampling-native-validation
+          path: |
+            tokenizers/patched.log
+            tokenizers/existing.log
+            tokenizers/baseline.log
